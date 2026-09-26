@@ -6,7 +6,8 @@ import bson
 
 BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k"
 DATABASE_URL = "mongodb+srv://Indiainformant2026_db_user:NE7KxMu9PwA1gI8k@cluster0.psj30qj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-PORT = int(os.environ.get("PORT", 8080))
+# Render के लॉग्स के अनुसार पोर्ट 10000 यूज़ हो रहा है
+PORT = int(os.environ.get("PORT", 10000)) 
 RENDER_URL = "https://nova-flix-bot.onrender.com"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -30,8 +31,8 @@ async def handle(request):
                             file_path = res_data["result"]["file_path"]
                             download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
                             raise web.HTTPFound(download_url)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error fetching file: {e}")
         return web.Response(text="File not found or expired!", status=404)
     
     return web.Response(text="NovaFlix Ultra Pro Max Server is active and running!")
@@ -48,20 +49,19 @@ async def telegram_webhook(request):
                 if text.startswith("/start"):
                     reply_text = (
                         "👋 Welcome to **NovaFlix Ultra Pro Max**!\n\n"
-                        "Mujhe koi bhi movie ya video file bhej, main tujhe turant real **Watch Now** aur **Direct Download** link bana kar dunga!"
+                        "मुझे कोई भी मूवी या वीडियो फ़ाइल भेज, मैं तुझे तुरंत रियल **Watch Now** और **Direct Download** लिंक बना कर दूंगा!"
                     )
                     payload = {"chat_id": chat_id, "text": reply_text, "parse_mode": "Markdown"}
-                    async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
-                        pass
+                    await session.post(f"{TELEGRAM_API}/sendMessage", json=payload)
                 else:
                     media = message.get("document") or message.get("video") or message.get("audio")
                     if media:
                         file_id = media.get("file_id")
                         file_name = media.get("file_name", "NovaFlix_Video.mp4")
-                        file_size_bytes = message.get("file_size", 0)
+                        file_size_bytes = media.get("file_size", 0)
                         file_size = round(file_size_bytes / (1024 * 1024), 2) if file_size_bytes else 0.0
                         
-                        # Database mein file save karo
+                        # Database में फ़ाइल सेव करो
                         inserted = await files_collection.insert_one({
                             "file_id": file_id,
                             "file_name": file_name,
@@ -75,7 +75,7 @@ async def telegram_webhook(request):
                         reply_text = (
                             f"📂 **File Name:** `{file_name}`\n"
                             f"📊 **Size:** `{file_size} MB`\n\n"
-                            f"👇 **Aapke Asli Links Taiyar Hain:**\n"
+                            f"👇 **आपके असली लिंक्स तैयार हैं:**\n"
                             f"🎬 [Watch Now (Stream)]({stream_link})\n"
                             f"📥 [Direct Download]({download_link})"
                         )
@@ -85,23 +85,28 @@ async def telegram_webhook(request):
                             "parse_mode": "Markdown",
                             "disable_web_page_preview": True
                         }
-                        async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
-                            pass
+                        await session.post(f"{TELEGRAM_API}/sendMessage", json=payload)
         return web.Response(text="OK")
     except Exception as e:
-        return web.Response(text=str(e), status=500)
+        print(f"Webhook processing error: {e}")
+        return web.Response(text="Error processing request", status=500)
 
 async def on_startup(app):
+    # यह फंक्शन सर्वर स्टार्ट होते ही वेबहुक रजिस्टर करेगा
     webhook_url = f"{RENDER_URL}/{BOT_TOKEN}"
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
-            print("Webhook fixed registration status:", await resp.text())
+            result = await resp.text()
+            print(f"Webhook Registration Status: {result}")
 
 if __name__ == "__main__":
-    web_app = web.Application()
-    web_app.router.add_get("/", handle)
-    web_app.router.add_get("/stream/{id}", handle)
-    web_app.router.add_post(f"/{BOT_TOKEN}", telegram_webhook)
-    web_app.on_startup.append(on_startup)
+    app = web.Application()
+    app.router.add_get("/", handle)
+    app.router.add_get("/stream/{id}", handle)
+    # वेबहुक के लिए POST रिक्वेस्ट को हैंडल करना
+    app.router.add_post(f"/{BOT_TOKEN}", telegram_webhook)
     
-    web.run_app(web_app, host="0.0.0.0", port=PORT)
+    # स्टार्टअप फंक्शन को सही तरीके से जोड़ना
+    app.on_startup.append(on_startup)
+    
+    web.run_app(app, host="0.0.0.0", port=PORT)
