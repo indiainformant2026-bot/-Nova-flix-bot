@@ -7,6 +7,7 @@ import bson
 BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k"
 DATABASE_URL = "mongodb+srv://Indiainformant2026_db_user:NE7KxMu9PwA1gI8k@cluster0.psj30qj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 PORT = int(os.environ.get("PORT", 8080))
+RENDER_URL = "https://nova-flix-bot.onrender.com"
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # MongoDB Connection Setup
@@ -15,15 +16,6 @@ db = mongo_client["NovaFlixDB"]
 files_collection = db["files"]
 
 async def handle(request):
-    # Auto-Webhook Setup on first visit
-    host = request.headers.get("Host", "")
-    if host and "onrender.com" in host:
-        base_url = f"https://{host}"
-        webhook_url = f"{base_url}/{BOT_TOKEN}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
-                pass
-
     path = request.path
     if path.startswith("/stream/"):
         file_id_str = path.split("/")[-1]
@@ -66,7 +58,7 @@ async def telegram_webhook(request):
                     if media:
                         file_id = media.get("file_id")
                         file_name = media.get("file_name", "NovaFlix_Video.mp4")
-                        file_size_bytes = media.get("file_size", 0)
+                        file_size_bytes = message.get("file_size", 0)
                         file_size = round(file_size_bytes / (1024 * 1024), 2) if file_size_bytes else 0.0
                         
                         # Database mein file save karo
@@ -77,12 +69,8 @@ async def telegram_webhook(request):
                         })
                         db_id = str(inserted.inserted_id)
                         
-                        host = request.headers.get("Host", "")
-                        scheme = request.headers.get("X-Forwarded-Proto", "https")
-                        base_url = f"{scheme}://{host}"
-                        
-                        stream_link = f"{base_url}/stream/{db_id}"
-                        download_link = f"{base_url}/stream/{db_id}"
+                        stream_link = f"{RENDER_URL}/stream/{db_id}"
+                        download_link = f"{RENDER_URL}/stream/{db_id}"
                         
                         reply_text = (
                             f"📂 **File Name:** `{file_name}`\n"
@@ -103,10 +91,17 @@ async def telegram_webhook(request):
     except Exception as e:
         return web.Response(text=str(e), status=500)
 
+async def on_startup(app):
+    webhook_url = f"{RENDER_URL}/{BOT_TOKEN}"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
+            print("Webhook fixed registration status:", await resp.text())
+
 if __name__ == "__main__":
     web_app = web.Application()
     web_app.router.add_get("/", handle)
     web_app.router.add_get("/stream/{id}", handle)
     web_app.router.add_post(f"/{BOT_TOKEN}", telegram_webhook)
+    web_app.on_startup.append(on_startup)
     
     web.run_app(web_app, host="0.0.0.0", port=PORT)
