@@ -1,5 +1,3 @@
-pyrogram
+pyrogram==2.0.106
 tgcrypto
-motor
 aiohttp
-jinja2
