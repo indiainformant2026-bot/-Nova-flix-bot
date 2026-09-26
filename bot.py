@@ -7,7 +7,10 @@ import bson
 BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k"
 DATABASE_URL = "mongodb+srv://Indiainformant2026_db_user:NE7KxMu9PwA1gI8k@cluster0.psj30qj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 PORT = int(os.environ.get("PORT", 8080))
-RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
+
+# Yahan apna Render ka live app ka link dal dena (jaise https://xyz.onrender.com)
+# Agar nahi pata, toh Render dashboard par upar mil jayega
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://novaflix-bot-xyz.onrender.com")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # MongoDB Setup
@@ -55,15 +58,13 @@ async def telegram_webhook(request):
                     async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
                         pass
                 else:
-                    # Check for any media type (document, video, audio)
                     media = message.get("document") or message.get("video") or message.get("audio")
                     if media:
                         file_id = media.get("file_id")
                         file_name = media.get("file_name", "Video_File.mp4")
-                        file_size_bytes = media.get("file_size", 0)
+                        file_size_bytes = message.get("file_size", 0)
                         file_size = round(file_size_bytes / (1024 * 1024), 2) if file_size_bytes else 0.0
                         
-                        # MongoDB mein file save karein
                         inserted = await files_collection.insert_one({
                             "file_id": file_id,
                             "file_name": file_name,
@@ -71,12 +72,13 @@ async def telegram_webhook(request):
                         })
                         db_id = str(inserted.inserted_id)
                         
-                        stream_link = f"{RENDER_URL}/stream/{db_id}"
-                        download_link = f"{RENDER_URL}/stream/{db_id}"
+                        # Render ka current external URL use karenge
+                        base_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_URL)
+                        stream_link = f"{base_url}/stream/{db_id}"
+                        download_link = f"{base_url}/stream/{db_id}"
                         
                         reply_text = (
-                            f"📂 **File Name:** `{file_name}`\n"
-                            f"📊 **Size:** `{file_size} MB`\n\n"
+                            f"📂 **File Name:** `{file_name}`\n\n"
                             f"👇 **Asli Links Taiyar Hain:**\n"
                             f"🎬 [Watch Now]({stream_link})\n"
                             f"📥 [Direct Download]({download_link})"
@@ -94,8 +96,9 @@ async def telegram_webhook(request):
         return web.Response(text=str(e), status=500)
 
 async def on_startup(app):
-    if RENDER_URL:
-        webhook_url = f"{RENDER_URL}/{BOT_TOKEN}"
+    base_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_URL)
+    if base_url:
+        webhook_url = f"{base_url}/{BOT_TOKEN}"
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
                 print("Webhook set status:", await resp.text())
