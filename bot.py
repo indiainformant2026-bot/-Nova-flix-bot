@@ -7,13 +7,9 @@ import bson
 BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k"
 DATABASE_URL = "mongodb+srv://Indiainformant2026_db_user:NE7KxMu9PwA1gI8k@cluster0.psj30qj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 PORT = int(os.environ.get("PORT", 8080))
-
-# Yahan apna Render ka live app ka link dal dena (jaise https://xyz.onrender.com)
-# Agar nahi pata, toh Render dashboard par upar mil jayega
-RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://novaflix-bot-xyz.onrender.com")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# MongoDB Setup
+# MongoDB Connection Setup
 mongo_client = AsyncIOMotorClient(DATABASE_URL)
 db = mongo_client["NovaFlixDB"]
 files_collection = db["files"]
@@ -37,7 +33,7 @@ async def handle(request):
             pass
         return web.Response(text="File not found or expired!", status=404)
     
-    return web.Response(text="NovaFlix Bot & Stream Server is running successfully!")
+    return web.Response(text="NovaFlix Ultra Pro Max Server is active and running!")
 
 async def telegram_webhook(request):
     try:
@@ -50,21 +46,21 @@ async def telegram_webhook(request):
             async with aiohttp.ClientSession() as session:
                 if text.startswith("/start"):
                     reply_text = (
-                        "👋 Hello!\n\n"
-                        "Main NovaFlix ka official File Stream aur Download bot hoon. "
-                        "Mujhe koi bhi file bhej, main tujhe real Watch Now aur Direct Download link de dunga!"
+                        "👋 Welcome to **NovaFlix Ultra Pro Max**!\n\n"
+                        "Mujhe koi bhi movie ya video file bhej, main tujhe turant real **Watch Now** aur **Direct Download** link bana kar dunga!"
                     )
-                    payload = {"chat_id": chat_id, "text": reply_text}
+                    payload = {"chat_id": chat_id, "text": reply_text, "parse_mode": "Markdown"}
                     async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
                         pass
                 else:
                     media = message.get("document") or message.get("video") or message.get("audio")
                     if media:
                         file_id = media.get("file_id")
-                        file_name = media.get("file_name", "Video_File.mp4")
-                        file_size_bytes = message.get("file_size", 0)
+                        file_name = media.get("file_name", "NovaFlix_Video.mp4")
+                        file_size_bytes = media.get("file_size", 0)
                         file_size = round(file_size_bytes / (1024 * 1024), 2) if file_size_bytes else 0.0
                         
+                        # Database mein file save karo
                         inserted = await files_collection.insert_one({
                             "file_id": file_id,
                             "file_name": file_name,
@@ -72,15 +68,23 @@ async def telegram_webhook(request):
                         })
                         db_id = str(inserted.inserted_id)
                         
-                        # Render ka current external URL use karenge
-                        base_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_URL)
+                        # Render ka external URL automatic nikalna
+                        render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+                        if not render_url:
+                            host = request.headers.get("Host", "")
+                            scheme = request.headers.get("X-Forwarded-Proto", "https")
+                            base_url = f"{scheme}://{host}"
+                        else:
+                            base_url = render_url
+                        
                         stream_link = f"{base_url}/stream/{db_id}"
                         download_link = f"{base_url}/stream/{db_id}"
                         
                         reply_text = (
-                            f"📂 **File Name:** `{file_name}`\n\n"
-                            f"👇 **Asli Links Taiyar Hain:**\n"
-                            f"🎬 [Watch Now]({stream_link})\n"
+                            f"📂 **File Name:** `{file_name}`\n"
+                            f"📊 **Size:** `{file_size} MB`\n\n"
+                            f"👇 **Aapke Asli Links Taiyar Hain:**\n"
+                            f"🎬 [Watch Now (Stream)]({stream_link})\n"
                             f"📥 [Direct Download]({download_link})"
                         )
                         payload = {
@@ -96,12 +100,12 @@ async def telegram_webhook(request):
         return web.Response(text=str(e), status=500)
 
 async def on_startup(app):
-    base_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_URL)
-    if base_url:
-        webhook_url = f"{base_url}/{BOT_TOKEN}"
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if render_url:
+        webhook_url = f"{render_url}/{BOT_TOKEN}"
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
-                print("Webhook set status:", await resp.text())
+                print("Webhook auto-set status:", await resp.text())
 
 if __name__ == "__main__":
     web_app = web.Application()
