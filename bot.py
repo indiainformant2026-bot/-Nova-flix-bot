@@ -15,6 +15,15 @@ db = mongo_client["NovaFlixDB"]
 files_collection = db["files"]
 
 async def handle(request):
+    # Auto-Webhook Setup on first visit
+    host = request.headers.get("Host", "")
+    if host and "onrender.com" in host:
+        base_url = f"https://{host}"
+        webhook_url = f"{base_url}/{BOT_TOKEN}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
+                pass
+
     path = request.path
     if path.startswith("/stream/"):
         file_id_str = path.split("/")[-1]
@@ -68,14 +77,9 @@ async def telegram_webhook(request):
                         })
                         db_id = str(inserted.inserted_id)
                         
-                        # Render ka external URL automatic nikalna
-                        render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
-                        if not render_url:
-                            host = request.headers.get("Host", "")
-                            scheme = request.headers.get("X-Forwarded-Proto", "https")
-                            base_url = f"{scheme}://{host}"
-                        else:
-                            base_url = render_url
+                        host = request.headers.get("Host", "")
+                        scheme = request.headers.get("X-Forwarded-Proto", "https")
+                        base_url = f"{scheme}://{host}"
                         
                         stream_link = f"{base_url}/stream/{db_id}"
                         download_link = f"{base_url}/stream/{db_id}"
@@ -99,19 +103,10 @@ async def telegram_webhook(request):
     except Exception as e:
         return web.Response(text=str(e), status=500)
 
-async def on_startup(app):
-    render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
-    if render_url:
-        webhook_url = f"{render_url}/{BOT_TOKEN}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
-                print("Webhook auto-set status:", await resp.text())
-
 if __name__ == "__main__":
     web_app = web.Application()
     web_app.router.add_get("/", handle)
     web_app.router.add_get("/stream/{id}", handle)
     web_app.router.add_post(f"/{BOT_TOKEN}", telegram_webhook)
-    web_app.on_startup.append(on_startup)
     
     web.run_app(web_app, host="0.0.0.0", port=PORT)
