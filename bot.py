@@ -4,6 +4,7 @@ from aiohttp import web
 
 BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k"
 PORT = int(os.environ.get("PORT", 8080))
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 async def handle(request):
@@ -28,7 +29,6 @@ async def telegram_webhook(request):
                     async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
                         pass
                 elif "document" in message or "video" in message or "audio" in message:
-                    file_name = "Video_File.mp4"
                     reply_text = (
                         f"📂 **File Received!**\n\n"
                         f"🎬 **Watch Now:** https://t.me/novaflix_link_bot?start=stream\n"
@@ -41,9 +41,17 @@ async def telegram_webhook(request):
     except Exception as e:
         return web.Response(text=str(e), status=500)
 
+async def on_startup(app):
+    if RENDER_URL:
+        webhook_url = f"{RENDER_URL}/{BOT_TOKEN}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{TELEGRAM_API}/setWebhook?url={webhook_url}") as resp:
+                print("Webhook set status:", await resp.text())
+
 if __name__ == "__main__":
     web_app = web.Application()
     web_app.router.add_get("/", handle)
     web_app.router.add_post(f"/{BOT_TOKEN}", telegram_webhook)
+    web_app.on_startup.append(on_startup)
     
     web.run_app(web_app, host="0.0.0.0", port=PORT)
