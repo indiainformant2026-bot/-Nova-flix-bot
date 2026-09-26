@@ -5,7 +5,7 @@ import motor.motor_asyncio
 import asyncio
 
 # --- Configuration (Your Ultra Pro Max Setup) ---
-BOT_TOKEN = "8597463109:AAEZ7PKvubQFr2Q_FODI7DiakpnSd_8B5hk" # Replace with your actual token if different
+BOT_TOKEN = "8597463109:AAEZ7PkvubQFr2Q_F0Dl7DiakpnS6_8BS9k" # Replace with your actual token if different
 # Password has been URL-encoded: % -> %25, # -> %23
 DATABASE_URL = "mongodb+srv://indainformant2026:hZpwBk5%253Nn%23FJa@cluster0.q0z94.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 RENDER_URL = "https://nova-flix-bot.onrender.com"
