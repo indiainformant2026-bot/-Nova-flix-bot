@@ -22,9 +22,9 @@ async def handle(request):
         try:
             file_doc = await files_collection.find_one({"_id": bson.ObjectId(file_id_str)})
             if file_doc:
-                file_id = file_doc["file_id"]
+                tg_file_id = file_doc["file_id"]
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(f"{TELEGRAM_API}/getFile?file_id={file_id}") as resp:
+                    async with session.get(f"{TELEGRAM_API}/getFile?file_id={tg_file_id}") as resp:
                         res_data = await resp.json()
                         if res_data.get("ok"):
                             file_path = res_data["result"]["file_path"]
@@ -54,38 +54,41 @@ async def telegram_webhook(request):
                     payload = {"chat_id": chat_id, "text": reply_text}
                     async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
                         pass
-                elif "document" in message or "video" in message or "audio" in message:
+                else:
+                    # Check for any media type (document, video, audio)
                     media = message.get("document") or message.get("video") or message.get("audio")
-                    file_id = media.get("file_id")
-                    file_name = media.get("file_name", "Video_File.mp4")
-                    file_size = round(media.get("file_size", 0) / (1024 * 1024), 2)
-                    
-                    # MongoDB mein file save karein
-                    inserted = await files_collection.insert_one({
-                        "file_id": file_id,
-                        "file_name": file_name,
-                        "file_size": file_size
-                    })
-                    db_id = str(inserted.inserted_id)
-                    
-                    stream_link = f"{RENDER_URL}/stream/{db_id}"
-                    download_link = f"{RENDER_URL}/stream/{db_id}"
-                    
-                    reply_text = (
-                        f"📂 **File Name:** `{file_name}`\n"
-                        f"📊 **Size:** `{file_size} MB`\n\n"
-                        f"👇 **Asli Links Taiyar Hain:**\n"
-                        f"🎬 [Watch Now]({stream_link})\n"
-                        f"📥 [Direct Download]({download_link})"
-                    )
-                    payload = {
-                        "chat_id": chat_id, 
-                        "text": reply_text, 
-                        "parse_mode": "Markdown",
-                        "disable_web_page_preview": True
-                    }
-                    async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
-                        pass
+                    if media:
+                        file_id = media.get("file_id")
+                        file_name = media.get("file_name", "Video_File.mp4")
+                        file_size_bytes = media.get("file_size", 0)
+                        file_size = round(file_size_bytes / (1024 * 1024), 2) if file_size_bytes else 0.0
+                        
+                        # MongoDB mein file save karein
+                        inserted = await files_collection.insert_one({
+                            "file_id": file_id,
+                            "file_name": file_name,
+                            "file_size": file_size
+                        })
+                        db_id = str(inserted.inserted_id)
+                        
+                        stream_link = f"{RENDER_URL}/stream/{db_id}"
+                        download_link = f"{RENDER_URL}/stream/{db_id}"
+                        
+                        reply_text = (
+                            f"📂 **File Name:** `{file_name}`\n"
+                            f"📊 **Size:** `{file_size} MB`\n\n"
+                            f"👇 **Asli Links Taiyar Hain:**\n"
+                            f"🎬 [Watch Now]({stream_link})\n"
+                            f"📥 [Direct Download]({download_link})"
+                        )
+                        payload = {
+                            "chat_id": chat_id, 
+                            "text": reply_text, 
+                            "parse_mode": "Markdown",
+                            "disable_web_page_preview": True
+                        }
+                        async with session.post(f"{TELEGRAM_API}/sendMessage", json=payload) as resp:
+                            pass
         return web.Response(text="OK")
     except Exception as e:
         return web.Response(text=str(e), status=500)
